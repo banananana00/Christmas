@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="format-detection" content="telephone=no, email=no">
+    <title>闪耀星顶圣诞树 - 纯净版</title>
+    <style>
+        /* 1. 微信特定重置 */
+        * {
+            -webkit-tap-highlight-color: transparent; /* 去除点击高亮 */
+            box-sizing: border-box;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* 彻底禁止滚动 */
+            background-color: #000000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            
+            /* 禁止微信浏览器的回弹效果 */
+            overscroll-behavior: none;
+            /* 禁止长按选中文本 */
+            -webkit-user-select: none;
+            user-select: none;
+            /* 禁止长按弹出系统菜单 */
+            -webkit-touch-callout: none;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh; /* 兼容性写法 */
+            height: 100dvh; /* 针对移动端动态高度的优化 */
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            touch-action: none; /* 交给 JS 处理手势 */
+            cursor: pointer; /* 提示可点击 */
+        }
+
+        /* UI 层样式优化 */
+        #ui-layer {
+            position: absolute;
+            bottom: max(20px, env(safe-area-inset-bottom)); /* 适配 iPhone X 底部黑条 */
+            left: 20px;
+            right: 20px;
+            z-index: 10;
+            color: rgba(255, 255, 255, 0.85);
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .controls-info {
+            background: rgba(30, 30, 35, 0.85); /* 加深背景，提高微信中对比度 */
+            padding: 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px); /* Safari/iOS微信支持 */
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            pointer-events: auto;
+            width: 100%;
+            max-width: 350px;
+            transition: opacity 0.3s;
+        }
+
+        /* 移除 h1 和 p 的样式，因为内容已移除，但保留基础设置以防万一 */
+        
+        /* 滑块美化 */
+        .slider-container {
+            /* margin-top: 18px;  移除标题后，顶部间距可以减少 */
+            width: 100%;
+            padding-bottom: 5px;
+        }
+
+        .slider-label {
+            font-size: 0.85rem;
+            color: #ff7675;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            font-weight: 600;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+            height: 24px; /* 增加点击区域 */
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #ff7675;
+            cursor: pointer;
+            margin-top: -10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+            border: 2px solid #fff;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+
+        #webcam-btn {
+            margin-top: 10px;
+            pointer-events: auto;
+            background: linear-gradient(135deg, rgba(255, 118, 117, 0.2), rgba(255, 118, 117, 0.1));
+            border: 1px solid #ff7675;
+            color: #ff7675;
+            padding: 10px 0;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            width: 100%;
+            font-weight: 600;
+            text-align: center;
+            /* 消除点击闪烁 */
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #webcam-btn:active {
+            background: #ff7675;
+            color: #fff;
+            transform: scale(0.98);
+        }
+
+        #webcam-status {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 8px;
+            text-align: center;
+            min-height: 1.2em;
+        }
+
+        #input-video { display: none; }
+    </style>
+
+    <!-- 资源库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        <div class="controls-info">
+            <!-- 移除了标题和说明文字，界面更清爽 -->
+            
+            <div class="slider-container">
+                <div class="slider-label">
+                    <span>✨ 缩放</span>
+                    <span id="energy-val">0%</span>
+                </div>
+                <input type="range" id="dispersion-slider" min="1.0" max="4.0" step="0.01" value="1.0">
+            </div>
+
+            <div style="margin-top: 5px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                <p style="font-size:0.8rem; color:#aaa; margin: 0 0 8px 0;">🖐️ 手势控制</p>
+                <button id="webcam-btn">启动摄像头</button>
+                <div id="webcam-status"></div>
+            </div>
+        </div>
+    </div>
+
+    <video id="input-video"></video>
+
+    <script>
+        // 防止微信上下滑动回弹
+        document.body.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+        }, { passive: false });
+
+        let scene, camera, renderer, controls;
+        let particleSystem;
+        let clock = new THREE.Clock();
+        const slider = document.getElementById('dispersion-slider');
+        const energyVal = document.getElementById('energy-val');
+
+        const state = {
+            dispersion: 1.0,
+            targetDispersion: 1.0,
+            rotationSpeed: 0.1,
+            isExploded: false // 点击状态追踪
+        };
+
+        function initThree() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x000000, 0.0015);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 15, 90); 
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.autoRotate = true;
+            controls.autoRotateSpeed = 0.5; 
+            controls.maxDistance = 200;
+            controls.rotateSpeed = 0.5;
+            controls.enableZoom = true;
+            controls.enablePan = false; 
+
+            createParticles();
+
+            window.addEventListener('resize', onWindowResize);
+            // 滑块控制
+            slider.addEventListener('input', (e) => {
+                state.targetDispersion = parseFloat(e.target.value);
+                state.isExploded = state.targetDispersion > 1.5; // 更新状态
+                updateEnergyLabel(state.targetDispersion);
+            });
+            
+            // 点击屏幕交互 (爆炸/还原)
+            container.addEventListener('click', onCanvasClick);
+            container.addEventListener('touchstart', onCanvasTouchStart, {passive: false});
+
+            animate();
+        }
+
+        // 处理点击：爆炸/还原切换
+        let touchStartTime = 0;
+        function onCanvasTouchStart() {
+            touchStartTime = Date.now();
+        }
+
+        function onCanvasClick(e) {
+            state.isExploded = !state.isExploded;
+            const newVal = state.isExploded ? 4.0 : 1.0;
+            state.targetDispersion = newVal;
+            slider.value = newVal;
+            updateEnergyLabel(newVal);
+        }
+
+        function updateEnergyLabel(val) {
+            const percent = Math.round(((val - 1.0) / 3.0) * 100);
+            energyVal.innerText = `${percent}%`;
+        }
+
+        function createEmojiTexture() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const size = 512; 
+            const cols = 4;   
+            const rows = 2;   
+            const cellSize = size / cols; 
+
+            canvas.width = size;
+            canvas.height = size / 2; 
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = `${cellSize * 0.8}px serif`; 
+
+            const icons = ['🎁', '🔔', '🍬', '🌟', '❄️'];
+
+            icons.forEach((icon, i) => {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                const x = col * cellSize + cellSize / 2;
+                const y = row * cellSize + cellSize / 2 + cellSize * 0.1; 
+                ctx.fillText(icon, x, y);
+            });
+
+            // Index 5: 光点
+            const i = 5;
+            const col = i % cols;
+            const row = Math.floor(i / cols);
+            const x = col * cellSize + cellSize / 2;
+            const y = row * cellSize + cellSize / 2;
+            const grad = ctx.createRadialGradient(x, y, 0, x, y, cellSize * 0.4);
+            grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            grad.addColorStop(0.5, 'rgba(255, 255, 255, 0.5)');
+            grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(x, y, cellSize * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+
+            const texture = new THREE.CanvasTexture(canvas);
+            return texture;
+        }
+
+        function createParticles() {
+            const texture = createEmojiTexture();
+
+            const treeParticleCount = 12000; 
+            const ringParticleCount = 6000; 
+            const ribbonParticleCount = 1200;
+            const giftParticleCount = 144; 
+            const totalParticles = treeParticleCount + ringParticleCount + ribbonParticleCount + giftParticleCount;
+
+            const positions = new Float32Array(totalParticles * 3);
+            const colors = new Float32Array(totalParticles * 3);
+            const sizes = new Float32Array(totalParticles);
+            const imgIndices = new Float32Array(totalParticles); 
+            const types = new Float32Array(totalParticles); 
+            const speeds = new Float32Array(totalParticles);
+
+            const colorDeepGreen = new THREE.Color(0x052e16);
+            const colorPine = new THREE.Color(0x14532d);
+            const colorWarmLight = new THREE.Color(0xfff5d6);
+            const colorGold = new THREE.Color(0xffd700);
+            const colorRibbonRed = new THREE.Color(0xff0000);
+            const colorRibbonGold = new THREE.Color(0xffcc00);
+            const colorSaturnInner = new THREE.Color(0xd2b48c);
+            const colorSaturnOuter = new THREE.Color(0xf0f8ff);
+            const tempColor = new THREE.Color();
+            
+            const treeHeight = 55;
+            const treeBottom = -25;
+            const topStarCount = 300; 
+
+            for (let i = 0; i < treeParticleCount; i++) {
+                if (i < topStarCount) {
+                    const centerX = 0;
+                    const centerY = treeBottom + treeHeight + 0.5; 
+                    const centerZ = 0;
+                    const outerRadius = 3.0; 
+                    const innerRadius = 1.4; 
+                    const sector = i % 10; 
+                    const armIndex = Math.floor(sector / 2); 
+                    const isRightSide = sector % 2 === 1; 
+                    const angleStep = (Math.PI * 2) / 5;
+                    const startAngle = Math.PI / 2;
+                    const outerAngle = startAngle + armIndex * angleStep;
+                    const innerAngle = startAngle + armIndex * angleStep + angleStep / 2; 
+                    const prevInnerAngle = startAngle + armIndex * angleStep - angleStep / 2; 
+
+                    let p1x, p1y, p2x, p2y;
+                    if (isRightSide) {
+                        p1x = Math.cos(outerAngle) * outerRadius;
+                        p1y = Math.sin(outerAngle) * outerRadius;
+                        p2x = Math.cos(innerAngle) * innerRadius;
+                        p2y = Math.sin(innerAngle) * innerRadius;
+                    } else {
+                        p1x = Math.cos(prevInnerAngle) * innerRadius;
+                        p1y = Math.sin(prevInnerAngle) * innerRadius;
+                        p2x = Math.cos(outerAngle) * outerRadius;
+                        p2y = Math.sin(outerAngle) * outerRadius;
+                    }
+
+                    const r1 = Math.random();
+                    const r2 = Math.random();
+                    const sqrtR1 = Math.sqrt(r1);
+                    const a = 1 - sqrtR1;
+                    const b = sqrtR1 * (1 - r2);
+                    const c = sqrtR1 * r2;
+
+                    const x = centerX + (0 * a + p1x * b + p2x * c);
+                    const y = centerY + (0 * a + p1y * b + p2y * c);
+                    const thickness = 2.0 * (1.0 - sqrtR1 * 0.5); 
+                    const z = centerZ + (Math.random() - 0.5) * thickness;
+
+                    positions[i * 3] = x;
+                    positions[i * 3 + 1] = y;
+                    positions[i * 3 + 2] = z;
+
+                    tempColor.copy(colorGold);
+                    if (Math.random() > 0.5) tempColor.offsetHSL(0, 0, 0.2);
+
+                    colors[i * 3] = tempColor.r;
+                    colors[i * 3 + 1] = tempColor.g;
+                    colors[i * 3 + 2] = tempColor.b;
+
+                    sizes[i] = 2.5; 
+                    imgIndices[i] = 3.0; 
+                    types[i] = 0.0;
+                    speeds[i] = Math.random();
+                    continue; 
+                }
+
+                let hRatio = Math.random(); 
+                hRatio = 1 - Math.pow(1 - hRatio, 1.1); 
+                let y = treeBottom + hRatio * treeHeight;
+                let maxRadius = 24 * (1.0 - hRatio); 
+                maxRadius *= (0.92 + 0.16 * Math.sin(hRatio * 40.0 + i));
+                let angle = Math.random() * Math.PI * 2;
+                let rRatio = Math.sqrt(Math.random()); 
+                if (rRatio < 0.5) rRatio = 0.5 + rRatio * 0.5;
+                let r = maxRadius * rRatio;
+                let x = r * Math.cos(angle);
+                let z = r * Math.sin(angle);
+
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = y;
+                positions[i * 3 + 2] = z;
+
+                let isSurface = r > maxRadius * 0.94; 
+                let index = 5.0; 
+                
+                if (isSurface && Math.random() < 0.09) { 
+                    if (Math.random() > 0.5) {
+                        index = 1.0; 
+                        tempColor.setHex(0xffda79); 
+                    } else {
+                        index = 2.0; 
+                        tempColor.setHex(0xffffff); 
+                    }
+                    sizes[i] = 3.0; 
+                }
+                else if (isSurface && Math.random() < 0.3) {
+                    tempColor.copy(colorWarmLight);
+                    sizes[i] = 1.5; 
+                    index = 5.0; 
+                }
+                else {
+                    tempColor.copy(colorDeepGreen).lerp(colorPine, rRatio);
+                    sizes[i] = 1.0; 
+                    if(Math.random() < 0.2) index = 4.0; 
+                    else index = 5.0; 
+                }
+
+                colors[i * 3] = tempColor.r;
+                colors[i * 3 + 1] = tempColor.g;
+                colors[i * 3 + 2] = tempColor.b;
+                imgIndices[i] = index;
+                types[i] = 0.0; 
+                speeds[i] = Math.random();
+            }
+
+            // Ribbon
+            const ribbonStart = treeParticleCount;
+            const ribbonTurns = 6.0;
+            for (let i = ribbonStart; i < ribbonStart + ribbonParticleCount; i++) {
+                let j = i - ribbonStart;
+                let t = j / ribbonParticleCount;
+                let isRed = j % 2 === 0;
+                let phase = isRed ? 0 : Math.PI;
+                let hRatio = 1.0 - t; 
+                let y = treeBottom + hRatio * treeHeight;
+                let baseRadius = 24 * (1.0 - hRatio);
+                let r = baseRadius * 1.05;
+                let angle = hRatio * Math.PI * 2 * ribbonTurns + phase;
+                let x = r * Math.cos(angle);
+                let z = r * Math.sin(angle);
+                x += (Math.random() - 0.5) * 0.6;
+                y += (Math.random() - 0.5) * 0.6;
+                z += (Math.random() - 0.5) * 0.6;
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = y;
+                positions[i * 3 + 2] = z;
+                if (isRed) tempColor.copy(colorRibbonRed);
+                else tempColor.copy(colorRibbonGold);
+                colors[i * 3] = tempColor.r;
+                colors[i * 3 + 1] = tempColor.g;
+                colors[i * 3 + 2] = tempColor.b;
+                sizes[i] = 1.5;
+                imgIndices[i] = 5.0; 
+                types[i] = 0.0;
+                speeds[i] = Math.random();
+            }
+
+            // Gifts
+            const giftStart = ribbonStart + ribbonParticleCount;
+            for (let i = giftStart; i < giftStart + giftParticleCount; i++) {
+                let hRatio = Math.random();
+                hRatio = 1 - Math.pow(1 - hRatio, 0.8);
+                let y = treeBottom + hRatio * treeHeight;
+                let maxRadius = 24 * (1.0 - hRatio);
+                let r = maxRadius * (0.95 + Math.random() * 0.1); 
+                let angle = Math.random() * Math.PI * 2;
+                let x = r * Math.cos(angle);
+                let z = r * Math.sin(angle);
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = y;
+                positions[i * 3 + 2] = z;
+                tempColor.setHex(0xffffff);
+                colors[i * 3] = tempColor.r;
+                colors[i * 3 + 1] = tempColor.g;
+                colors[i * 3 + 2] = tempColor.b;
+                sizes[i] = 5.0; 
+                imgIndices[i] = 0.0; 
+                types[i] = 2.0; 
+                speeds[i] = Math.random();
+            }
+
+            // Ring
+            const ringStart = giftStart + giftParticleCount;
+            const innerR = 32;  
+            const outerR = 65;  
+            const cassiniStart = 50; 
+            const cassiniEnd = 54;   
+            for (let i = ringStart; i < totalParticles; i++) {
+                let rRatio = Math.sqrt(Math.random());
+                let r = innerR + (outerR - innerR) * rRatio;
+                if (r > cassiniStart && r < cassiniEnd) {
+                    if (Math.random() > 0.5) r = cassiniStart - Math.random() * 2;
+                    else r = cassiniEnd + Math.random() * 2;
+                }
+                let angle = Math.random() * Math.PI * 2;
+                let x = r * Math.cos(angle);
+                let z = r * Math.sin(angle);
+                let y = (Math.random() - 0.5) * 0.4; 
+                let tiltAngle = 0.35; 
+                let tiltedY = y * Math.cos(tiltAngle) - z * Math.sin(tiltAngle);
+                let tiltedZ = y * Math.sin(tiltAngle) + z * Math.cos(tiltAngle);
+                tiltedY -= 5;
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = tiltedY;
+                positions[i * 3 + 2] = tiltedZ;
+                if (r < cassiniStart) tempColor.copy(colorSaturnInner);
+                else tempColor.copy(colorSaturnOuter);
+                tempColor.multiplyScalar(0.7);
+                colors[i * 3] = tempColor.r;
+                colors[i * 3 + 1] = tempColor.g;
+                colors[i * 3 + 2] = tempColor.b;
+                sizes[i] = 1.0;
+                imgIndices[i] = 5.0; 
+                if(Math.random() < 0.05) {
+                    imgIndices[i] = 3.0; 
+                    sizes[i] = 2.0;
+                }
+                types[i] = 1.0; 
+                speeds[i] = 10.0 / Math.sqrt(r); 
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            geometry.setAttribute('type', new THREE.BufferAttribute(types, 1));
+            geometry.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
+            geometry.setAttribute('imgIndex', new THREE.BufferAttribute(imgIndices, 1));
+
+            const material = new THREE.ShaderMaterial({
+                uniforms: {
+                    uTime: { value: 0 },
+                    uDispersion: { value: 1.0 }, 
+                    uPixelRatio: { value: window.devicePixelRatio },
+                    uTexture: { value: texture } 
+                },
+                vertexShader: `
+                    uniform float uTime;
+                    uniform float uDispersion;
+                    uniform float uPixelRatio;
+                    attribute vec3 color;
+                    attribute float size;
+                    attribute float type; 
+                    attribute float aSpeed; 
+                    attribute float imgIndex;
+                    varying vec3 vColor;
+                    varying float vType;
+                    varying float vImgIndex;
+                    
+                    vec3 random3(vec3 p) {
+                        return fract(sin(vec3(dot(p,vec3(127.1,311.7, 74.7)),
+                                              dot(p,vec3(269.5,183.3, 246.1)),
+                                              dot(p,vec3(113.5,271.9, 124.6)))) * 43758.5453) * 2.0 - 1.0;
+                    }
+
+                    mat3 rotateX(float angle) {
+                        float s = sin(angle);
+                        float c = cos(angle);
+                        return mat3(1.0, 0.0, 0.0, 0.0, c, -s, 0.0, s, c);
+                    }
+
+                    mat3 rotateY(float angle) {
+                        float s = sin(angle);
+                        float c = cos(angle);
+                        return mat3(c, 0.0, s, 0.0, 1.0, 0.0, -s, 0.0, c);
+                    }
+
+                    void main() {
+                        vColor = color;
+                        vType = type;
+                        vImgIndex = imgIndex;
+                        vec3 pos = position;
+                        vec3 noise = random3(pos);
+                        
+                        float boom = uDispersion - 1.0;
+                        
+                        if (type < 0.5) { // 树
+                            if (boom > 0.01) {
+                                float expansion = boom * 60.0;
+                                vec3 dir = normalize(pos); 
+                                // 增加随机性，减少线性辐射
+                                vec3 explodeDir = normalize(dir + noise * 2.5);
+                                // 距离差异化
+                                pos += explodeDir * expansion * (0.2 + 0.8 * abs(noise.x));
+                                // 极大降低高频晃动，仅保留微小漂浮感
+                                pos.x += sin(uTime * 0.5 + pos.y) * boom * 0.5;
+                            }
+                        } else if (type < 1.5) { // 环
+                            if (boom > 0.01) {
+                                float expansion = boom * 50.0;
+                                vec3 dir = normalize(pos);
+                                vec3 explodeDir = normalize(dir + noise * 0.5); // 稍微乱一点
+                                pos += explodeDir * expansion;
+                                // 减少垂直拉伸
+                                pos.y += noise.y * boom * 5.0;
+                            }
+                        } else { // 礼物
+                             if (boom > 0.01) {
+                                float expansion = boom * 80.0; 
+                                vec3 dir = normalize(pos);
+                                // 礼物乱飞
+                                vec3 explodeDir = normalize(dir + noise * 3.0);
+                                pos += explodeDir * expansion;
+                                // 模拟翻滚
+                                float rot = boom * noise.z * 2.0;
+                                pos.x += sin(uTime + rot) * boom * 2.0; 
+                             }
+                        }
+
+                        if (type > 0.5 && type < 1.5) { 
+                            pos = rotateX(-0.35) * pos;
+                            float angle = uTime * 0.5 * aSpeed; 
+                            pos = rotateY(angle) * pos;
+                            pos = rotateX(0.35) * pos;
+                        }
+
+                        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                        gl_Position = projectionMatrix * mvPosition;
+                        
+                        float finalSize = size;
+                        if (boom > 0.1) finalSize *= (1.0 + boom);
+                        gl_PointSize = finalSize * uPixelRatio * (300.0 / -mvPosition.z);
+                    }
+                `,
+                fragmentShader: `
+                    uniform sampler2D uTexture;
+                    varying vec3 vColor;
+                    varying float vType;
+                    varying float vImgIndex;
+                    
+                    void main() {
+                        float cols = 4.0;
+                        float rows = 2.0;
+                        
+                        float colIndex = mod(vImgIndex, cols);
+                        float rowIndex = floor(vImgIndex / cols);
+                        
+                        vec2 uv = gl_PointCoord;
+                        uv.y = 1.0 - uv.y;
+                        
+                        vec2 cellUV = uv / vec2(cols, rows);
+                        cellUV.x += colIndex / cols;
+                        cellUV.y += (rows - 1.0 - rowIndex) / rows;
+                        
+                        vec4 texColor = texture2D(uTexture, cellUV);
+                        if (texColor.a < 0.1) discard;
+                        
+                        vec3 finalColor = vColor * texColor.rgb;
+                        gl_FragColor = vec4(finalColor * 0.8, texColor.a);
+                    }
+                `,
+                transparent: true,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending 
+            });
+
+            particleSystem = new THREE.Points(geometry, material);
+            scene.add(particleSystem);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            particleSystem.material.uniforms.uPixelRatio.value = window.devicePixelRatio;
+        }
+
+        function onMouseWheel(event) {
+            const delta = event.deltaY * 0.002;
+            state.targetDispersion += delta;
+            state.targetDispersion = Math.max(1.0, Math.min(4.0, state.targetDispersion));
+            slider.value = state.targetDispersion;
+            state.isExploded = state.targetDispersion > 2.5;
+            updateEnergyLabel(state.targetDispersion);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const elapsedTime = clock.getElapsedTime();
+
+            if (particleSystem) {
+                // 平滑动画：阻尼系数 0.02
+                state.dispersion += (state.targetDispersion - state.dispersion) * 0.02;
+                particleSystem.material.uniforms.uTime.value = elapsedTime;
+                particleSystem.material.uniforms.uDispersion.value = state.dispersion;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // --- MediaPipe 逻辑 ---
+        const videoElement = document.getElementById('input-video');
+        const btn = document.getElementById('webcam-btn');
+        const statusText = document.getElementById('webcam-status');
+        let hands;
+        let cameraMediaPipe;
+
+        btn.addEventListener('click', async () => {
+            if (location.protocol !== 'https:') {
+                statusText.innerText = "❌ 摄像头需要HTTPS环境";
+                statusText.style.color = "#ff4d4d";
+                return;
+            }
+            if (btn.innerText === "启动中...") return;
+            btn.innerText = "启动中...";
+            statusText.innerText = "正在加载 AI 模型...";
+
+            try {
+                await initMediaPipe();
+                btn.style.display = 'none';
+                statusText.innerText = "✅ 摄像头已连接";
+                statusText.style.color = "#81c784";
+            } catch (e) {
+                console.error(e);
+                statusText.innerText = "启动失败: " + e.message;
+                btn.innerText = "重试";
+            }
+        });
+
+        async function initMediaPipe() {
+            if (!window.Hands) throw new Error("MediaPipe Hands script missing");
+
+            hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+            hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+            hands.onResults(onHandsResults);
+
+            cameraMediaPipe = new Camera(videoElement, {
+                onFrame: async () => { await hands.send({image: videoElement}); },
+                width: 640, height: 480
+            });
+            await cameraMediaPipe.start();
+        }
+
+        function onHandsResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                const wrist = landmarks[0];
+                const middleMCP = landmarks[9];
+                const palmSize = Math.sqrt(Math.pow(wrist.x - middleMCP.x, 2) + Math.pow(wrist.y - middleMCP.y, 2));
+                
+                const middleTip = landmarks[12];
+                const fingerDist = Math.sqrt(Math.pow(wrist.x - middleTip.x, 2) + Math.pow(wrist.y - middleTip.y, 2));
+                
+                const openness = fingerDist / palmSize;
+                
+                let target = 1.0;
+                
+                if (openness < 1.3) {
+                    target = 1.0; 
+                    statusText.innerText = "✊ 握拳：还原";
+                } else if (openness > 1.8) {
+                    target = 4.0; 
+                    statusText.innerText = "🖐 张开：爆炸";
+                } else {
+                    target = 1.0 + (openness - 1.3) * (3.0 / 0.5);
+                    statusText.innerText = "✋ 手势识别中...";
+                }
+                
+                state.targetDispersion = Math.max(1.0, Math.min(4.0, target));
+                
+                slider.value = state.targetDispersion;
+                updateEnergyLabel(state.targetDispersion);
+                state.isExploded = state.targetDispersion > 2.0;
+                
+                statusText.innerText = `🖐️ 缩放: ${(val * 100).toFixed(0)}%`;
+            } else {
+                statusText.innerText = "等待手势...";
+            }
+        }
+
+        initThree();
+
+    </script>
+</body>
+</html>
